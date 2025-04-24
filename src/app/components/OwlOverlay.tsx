@@ -2,6 +2,7 @@
 import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import Phaser from 'phaser';
 import ViewerCount, { ViewerCountProvider, useViewerCount } from './ViewerCount';
+import {useTwitchChat} from "@/app/hooks/useTwitchChat";
 
 export type OwlAction = 'walk' | 'sleep' | 'dance' | 'fly';
 
@@ -14,7 +15,8 @@ const OwlOverlay = forwardRef((props, ref) => {
     console.log('Current viewer count in OwlOverlay:', count);
     const gameRef = useRef<HTMLDivElement>(null);
     const phaserRef = useRef<SceneWithAction | null>(null);
-
+    const messages = useTwitchChat();
+console.log(messages)
     useImperativeHandle(ref, () => ({
         triggerAction(action: OwlAction) {
             phaserRef.current?.handleAction(action);
@@ -124,12 +126,12 @@ const OwlOverlay = forwardRef((props, ref) => {
             }
 
             spawnSparkle(x: number, y: number) {
-                const sparkle = this.add.image(x, y, 'sparkle').setAlpha(0.7).setScale(0.1);
+                const sparkle = this.add.image(x, y, 'sparkle').setAlpha(0.7).setScale(0.01);
                 this.tweens.add({
                     targets: sparkle,
                     alpha: 0,
                     duration: 800,
-                    scale: 0.2,
+                    scale: 0.05,
                     ease: 'Cubic.easeOut',
                     onComplete: () => sparkle.destroy()
                 });
@@ -158,6 +160,11 @@ const OwlOverlay = forwardRef((props, ref) => {
 
     return (
         <>
+            <div className="absolute bottom-4 left-4 bg-black/70 rounded p-2 max-w-md text-white text-sm space-y-1">
+                {messages.map((m, i) => (
+                    <div key={i}><strong>{m.user}:</strong> {m.message}</div>
+                ))}
+            </div>
             <div ref={gameRef} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }} />
         </>
     );
