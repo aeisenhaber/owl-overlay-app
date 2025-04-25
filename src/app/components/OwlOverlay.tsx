@@ -1,8 +1,9 @@
 // OwlOverlay.tsx
-import { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import {forwardRef, useEffect, useImperativeHandle, useRef, useState} from 'react';
 import Phaser from 'phaser';
-import ViewerCount, { ViewerCountProvider, useViewerCount } from './ViewerCount';
+import {useViewerCount} from '@/app/context/ViewerCount.context';
 import {useTwitchChat} from "@/app/hooks/useTwitchChat";
+import {useChatterColor} from "@/app/context/ChatColorContext";
 
 export type OwlAction = 'walk' | 'sleep' | 'dance' | 'fly';
 
@@ -10,24 +11,49 @@ interface SceneWithAction extends Phaser.Scene {
     handleAction: (action: OwlAction) => void;
 }
 
+interface Chatter {
+    user_id: number;
+    user_name: string;
+}
+
 const OwlOverlay = forwardRef((props, ref) => {
     const count = useViewerCount();
-    console.log('Current viewer count in OwlOverlay:', count);
+    const { getColor } = useChatterColor();
+
     const gameRef = useRef<HTMLDivElement>(null);
     const phaserRef = useRef<SceneWithAction | null>(null);
     const messages = useTwitchChat();
-console.log(messages)
+
     useImperativeHandle(ref, () => ({
         triggerAction(action: OwlAction) {
             phaserRef.current?.handleAction(action);
         }
     }));
 
-    useEffect(() => {
-        if (count === null) return;
-        class OverlayScene extends Phaser.Scene implements SceneWithAction {
-            owls: Phaser.Physics.Arcade.Sprite[] = [];
+    const [chatters, setChatters] = useState<Chatter[]>([]);
 
+    useEffect(() => {
+        const fetchChatters = async () => {
+            const res = await fetch('/api/chatters');
+            const data = await res.json();
+            console.log('chatter data', data)
+            setChatters(data.chatters);
+        };
+
+        fetchChatters();
+        const interval = setInterval(fetchChatters, 30000);
+
+        return () => clearInterval(interval);
+    }, []);
+
+
+
+    useEffect(() => {
+        if (!chatters || chatters.length === 0) {
+            return;
+        }
+        class OverlayScene extends Phaser.Scene implements SceneWithAction {
+            owls: { sprite: Phaser.Physics.Arcade.Sprite, name: Phaser.GameObjects.Text }[] = [];
             preload() {
                 this.load.spritesheet('owl-walk', '/assets/fly3.webp', { frameWidth: 64, frameHeight: 64 });
                 this.load.spritesheet('owl-sleep', '/assets/fly3.webp', { frameWidth: 64, frameHeight: 64 });
@@ -36,7 +62,8 @@ console.log(messages)
                 this.load.image('sparkle', '/assets/sparkle.png');
             }
 
-            create() {
+            async create() {
+                console.log('create');
                 this.physics.world.setBounds(0, 0, window.innerWidth, window.innerHeight);
 
                 this.anims.create({ key: 'walk', frames: this.anims.generateFrameNumbers('owl-walk', { start: 0, end: 7 }), frameRate: 10, repeat: -1 });
@@ -44,29 +71,47 @@ console.log(messages)
                 this.anims.create({ key: 'dance', frames: this.anims.generateFrameNumbers('owl-dance', { start: 0, end: 5 }), frameRate: 6, repeat: -1 });
                 this.anims.create({ key: 'fly', frames: this.anims.generateFrameNumbers('owl-fly', { start: 0, end: 5 }), frameRate: 8, repeat: -1 });
 
-                const pastelColors = [0xffc1cc, 0xc1ffd7, 0xc1d8ff, 0xf6ffc1, 0xe0c1ff];
+                const owlCount = count !== null ? Math.min(200, Math.floor(count)) : 50;
 
-                const owlCount = count !== null ? (Math.min(200, Math.floor(count)) + 10): 50;
-                for (let i = 0; i < owlCount; i++) {
+                // 🛠 await all owl spawns
+                await Promise.all(chatters.map(async (chatter) => {
                     const owl = this.physics.add.sprite(
                         Phaser.Math.Between(100, window.innerWidth - 100),
                         Phaser.Math.Between(100, window.innerHeight - 200),
                         'owl-fly'
                     );
-                    owl.setScale(Phaser.Math.Between(1, 5)/5);
-                    owl.play('fly');
-                    owl.setTint(Phaser.Utils.Array.GetRandom(pastelColors));
+                   // owl.setScale(Phaser.Math.Between(1, 5) / 5);
+
+                    const color = await getColor(chatter.user_id);
+                    owl.setTint(Phaser.Display.Color.HexStringToColor(color).color);
+
+                    const nameText = this.add.text(owl.x, owl.y - 30, chatter.user_name, {
+                        font: '12px Arial',
+                        color: '#ffffff',
+                        backgroundColor: '#00000088',
+                        padding: { left: 4, right: 4, top: 2, bottom: 2 },
+                        align: 'center'
+                    }).setOrigin(0.5)
+                        .setShadow(1, 1, '#000000', 2, true, true); ;
+
                     const body = owl.body as Phaser.Physics.Arcade.Body | null;
                     if (body) {
                         body.setCollideWorldBounds(true);
                     }
-                    this.owls.push(owl);
-                }
+                    owl.play('fly');
+                    this.owls.push({ sprite: owl, name: nameText });
+                }));
 
                 phaserRef.current = this;
+
                 this.flyAllOwls();
             }
-
+            update() {
+                this.owls.forEach(({ sprite, name }) => {
+                    name.x = sprite.x;
+                    name.y = sprite.y - 40;
+                });
+            }
             handleAction(action: OwlAction) {
                 if (action === 'fly') {
                     this.flyAllOwls();
@@ -74,23 +119,33 @@ console.log(messages)
             }
 
             flyAllOwls() {
-                this.owls.forEach(owl => {
+                this.owls.forEach(({ sprite, name }) => {
                     const flyLoop = () => {
                         const newX = Phaser.Math.Between(50, window.innerWidth - 50);
                         const newY = Phaser.Math.Between(50, window.innerHeight - 150);
 
-                        owl.setFlipX(newX < owl.x);
+                        sprite.setFlipX(newX < sprite.x);
 
+                        // Move the sprite
                         this.tweens.add({
-                            targets: owl,
+                            targets: sprite,
                             x: newX,
                             y: newY,
                             duration: Phaser.Math.Between(1000, 2500),
                             ease: 'Sine.easeInOut',
                             onComplete: () => {
                                 flyLoop();
-                                this.spawnSparkle(owl.x, owl.y);
+                                this.spawnSparkle(sprite.x, sprite.y);
                             }
+                        });
+
+                        // Move the name label separately
+                        this.tweens.add({
+                            targets: name,
+                            x: newX,
+                            y: newY - 40, // ✅ 40px ABOVE the owl
+                            duration: Phaser.Math.Between(1000, 2500),
+                            ease: 'Sine.easeInOut',
                         });
                     };
 
@@ -156,7 +211,7 @@ console.log(messages)
         return () => {
             game.destroy(true);
         };
-    }, [count]);
+    }, [chatters]);
 
     return (
         <>
@@ -164,7 +219,9 @@ console.log(messages)
                 {messages.map((m, i) => (
                     <div key={i}><strong>{m.user}:</strong> {m.message}</div>
                 ))}
+
             </div>
+
             <div ref={gameRef} style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }} />
         </>
     );

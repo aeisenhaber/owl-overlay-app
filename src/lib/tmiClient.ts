@@ -2,22 +2,27 @@
 import tmi from 'tmi.js';
 import { db } from './db';
 import { io } from './socket';
+import { getValidAccessToken } from "./getValidAccessToken";
 
 let client: tmi.Client | null = null;
 
 export async function startTmiClient() {
     if (client) return; // prevent multiple connects
+    const user = await db.twitchToken.findFirst();
 
-    const tokenRecord = await db.twitchToken.findFirst({
-        orderBy: { createdAt: 'desc' },
-    });
+    if (!user) {
+        console.warn('No user found in database.');
+        return;
+    }
 
-    if (!tokenRecord) {
+    const accessToken = await getValidAccessToken(user.userId);
+    const username = user.username;
+
+    if (!accessToken) {
         console.warn('No Twitch token found in database.');
         return;
     }
 
-    const { username, accessToken } = tokenRecord;
 
     client = new tmi.Client({
         options: { debug: true },

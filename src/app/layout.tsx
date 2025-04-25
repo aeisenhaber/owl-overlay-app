@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./assets/globals.css";
+import {ChatterColorProvider} from "@/app/context/ChatColorContext";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -27,7 +28,9 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-transparent margin-0 overflow-hidden`}
       >
+      <ChatterColorProvider>
         {children}
+      </ChatterColorProvider>
       </body>
     </html>
   );

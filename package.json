@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "chat-server": "npx ts-node src/server.ts"
+    "chat-server": "npx ts-node --require tsconfig-paths/register src/server.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.6.0",
@@ -33,6 +33,7 @@
     "eslint-config-next": "15.3.1",
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.8.3"
   }
 }

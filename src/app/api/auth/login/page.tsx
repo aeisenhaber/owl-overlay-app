@@ -8,7 +8,7 @@ export default function LoginPage() {
     const loginWithTwitch = () => {
         const clientId = process.env.NEXT_PUBLIC_TWITCH_CLIENT_ID!;
         const redirectUri = process.env.NEXT_PUBLIC_TWITCH_REDIRECT_URI!;
-        const scope = 'chat:read chat:edit';
+        const scope = 'chat:read chat:edit moderator:read:chatters';
 
         const authUrl = `https://id.twitch.tv/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=${scope}`;
         window.location.href = authUrl;
